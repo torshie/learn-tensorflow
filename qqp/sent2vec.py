@@ -9,14 +9,6 @@ import numpy as np
 import tensorflow as tf
 
 
-class Model:
-    def __init__(self):
-        pass
-
-    def save(self, filename):
-        pass
-
-
 def parse_cmdline():
     p = argparse.ArgumentParser()
     p.add_argument('--vector', required=False)
@@ -80,7 +72,8 @@ def dataset_sent2vec(dictionary, vector, unknown, dataset):
         result.append((
             sent2vec(dictionary, vector, unknown, d[0]),
             sent2vec(dictionary, vector, unknown, d[1]),
-            d[2]))
+            d[2],
+            d[0], d[1]))
         if i % 10000 == 0:
             print(i)
     return result
