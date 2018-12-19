@@ -54,6 +54,7 @@ def main():
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy',
         metrics=['accuracy'])
     for i in range(10):
+        print("Real epoch %d/10" % (i+1))
         model.fit(train[0], train[1], epochs=1)
         print("Evaluating on dev set ...")
         r = model.evaluate(dev[0], dev[1])

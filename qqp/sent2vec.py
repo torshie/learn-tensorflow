@@ -36,6 +36,15 @@ def load_word2vec(filename):
     return dictionary, vector
 
 
+def strip_quote(sentence):
+    if len(sentence) <= 1:
+        return sentence
+    if not (sentence[0] == '"' and sentence[-1] == '"'):
+        return sentence
+    p = sentence[1:-1]
+    return p.replace('""', '"')
+
+
 def load_question_pair(filename):
     with open(filename) as f:
         result = []
@@ -45,7 +54,7 @@ def load_question_pair(filename):
             x = line.rstrip().split('\t')
             if len(x) != 6:
                 continue
-            result.append((x[3], x[4], int(x[5])))
+            result.append((strip_quote(x[3]), strip_quote(x[4]), int(x[5])))
 
     length = len(result)
     train = int(length * 0.75)
@@ -54,15 +63,40 @@ def load_question_pair(filename):
     return result[:train], result[train:train+dev], result[train+dev:]
 
 
+def cleanup_word(w):
+    if len(w) > 1 and (w.startswith("'") or w.startswith('“')):
+        w = w[1:]
+    if len(w) > 1 and (w.endswith("'") or w.endswith('”')):
+        w = w[:-1]
+    return w
+
+
+def word2vec(dictionary, vector, unknown, word):
+    if word not in dictionary:
+        word = cleanup_word(word)
+    offset = dictionary.get(word, None)
+    if offset is None:
+        unknown.add(word)
+        return np.zeros([vector.shape[1]], dtype=np.float32)
+
+    return vector[offset]
+
+
 def sent2vec(dictionary, vector, unknown, sentence):
     dim = vector.shape[1]
-    result = np.zeros([dim], dtype=np.float32)
-    for word in tf.keras.preprocessing.text.text_to_word_sequence(sentence):
-        offset = dictionary.get(word, None)
-        if offset is None:
-            unknown.add(word)
-            continue
-        result += vector[dictionary[word]]
+    result = np.zeros([dim * 2], dtype=np.float32)
+    words = tf.keras.preprocessing.text.text_to_word_sequence(sentence)
+    if len(words) == 0:
+        return result
+
+    if len(words) == 1:
+        words = words * 2
+
+    previous = word2vec(dictionary, vector, unknown, words[0])
+    for i in range(1, len(words) - 1):
+        current = word2vec(dictionary, vector, unknown, words[i])
+        result += np.concatenate([previous, current])
+        previous = current
     return result
 
 
