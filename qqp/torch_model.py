@@ -4,19 +4,22 @@ import argparse
 import pickle
 import time
 import itertools
+import os.path
+import shutil
 
 import torch
 import torch.nn.functional
 import torch.optim
 import torch.utils.data
 
+import tensorboardX
 
-from TbLog import TbLog
+
 from WordVector import WordVector
 
 
-margin = 0.4
-tblog = None
+margin = 0.9
+log_writer = None
 
 
 class SentenceEncoder(torch.nn.Module):
@@ -91,7 +94,7 @@ def eval_output(r0, r1, target):
         if y_ > m and y > m:
             correct += 1
             continue
-    return correct
+    return correct, predict.sum()
 
 
 def evaluate(loader, model, step):
@@ -101,18 +104,22 @@ def evaluate(loader, model, step):
         correct = 0
         model.eval()
         total_loss = 0
+        output_sum = 0
         for x0, x1, expected in itertools.chain(*loader):
             total += len(expected)
             r0 = model(x0)
             r1 = model(x1)
             total_loss += torch.nn.functional.cosine_embedding_loss(r0, r1,
                 expected, margin=margin, reduction='sum')
-            correct += eval_output(r0, r1, expected)
+            n, s = eval_output(r0, r1, expected)
+            correct += n
+            output_sum += s
 
     if step is not None:
-        tblog.log_scalar('dev_loss', total_loss, step)
-        tblog.log_scalar('dev_accuracy', correct / total, step)
+        log_writer.add_scalars('loss', {'dev': total_loss / total}, step)
+        log_writer.add_scalars('accuracy', {'dev': correct / total}, step)
     print("Eval() time: ", time.time() - start)
+    print("output mean: ", output_sum / total)
     return total, correct, correct / total
 
 
@@ -151,17 +158,19 @@ def main():
     print("Building model")
     model = create_encoder(word2vec)
 
-    global tblog
-    tblog = TbLog("log")
-
-    r = evaluate(dev_loader, model, 0)
+    r = evaluate(dev_loader, model, None)
     print("Initial dev set evaluation:", r)
+
+    global log_writer
+    if os.path.isdir('log'):
+        shutil.rmtree('log')
+    log_writer = tensorboardX.SummaryWriter('log')
 
     sparse_optimizer = torch.optim.SparseAdam(model.sparse_parameters())
     dense_optimizer = torch.optim.Adam(model.dense_parameters())
     criterion = torch.nn.CosineEmbeddingLoss(margin=margin)
 
-    epoch = 100
+    epoch = 25
 
     for e in range(epoch):
         print("Epoch %d ===============" % e)
@@ -184,12 +193,12 @@ def main():
             sparse_optimizer.step()
 
             total_loss += loss.item() * len(y)
-            correct += eval_output(r0, r1, y)
+            correct += eval_output(r0, r1, y)[0]
 
         print("Epoch size:", sample, "average loss:", total_loss / sample,
             "time", time.time() - start)
-        tblog.log_scalar('train_loss', total_loss, e + 1)
-        tblog.log_scalar('train_accuracy', correct / sample, e + 1)
+        log_writer.add_scalars('loss', {'train': total_loss / sample}, e + 1)
+        log_writer.add_scalars('accuracy', {'train': correct / sample}, e + 1)
         r = evaluate(dev_loader, model, e + 1)
         print("Dev set evaluation", r)
 
