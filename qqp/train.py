@@ -14,17 +14,21 @@ def parse_cmdline():
 
 
 def convert(dataset):
-    x, y, q1, q2 = [], [], [], []
+    x, y = [], []
     for a, b, c, d, e in dataset:
         vec = np.zeros([len(a) * 2], dtype=np.float32)
         vec[:len(a)] = a
         vec[len(a):] = b
         x.append(vec)
         y.append(c)
-        q1.append(d)
-        q2.append(e)
 
-    return np.array(x, dtype=np.float32), np.array(y, dtype=np.int32), q1, q2
+        vec = np.zeros([len(a) * 2], dtype=np.float32)
+        vec[:len(a)] = b
+        vec[len(a):] = a
+        x.append(vec)
+        y.append(c)
+
+    return np.array(x, dtype=np.float32), np.array(y, dtype=np.int32)
 
 
 def load_dataset(filename):
@@ -48,13 +52,14 @@ def main():
     model = tf.keras.models.Sequential([
         tf.keras.layers.Dense(size, activation=tf.nn.relu),
         tf.keras.layers.Dense(100, activation=tf.nn.relu),
+        tf.keras.layers.Dense(10, activation=tf.nn.relu),
         tf.keras.layers.Dropout(0.2),
         tf.keras.layers.Dense(2, activation=tf.nn.softmax)
     ])
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy',
         metrics=['accuracy'])
-    for i in range(10):
-        print("Real epoch %d/10" % (i+1))
+    for i in range(6):
+        print("Real epoch %d/6" % (i+1))
         model.fit(train[0], train[1], epochs=1)
         print("Evaluating on dev set ...")
         r = model.evaluate(dev[0], dev[1])
