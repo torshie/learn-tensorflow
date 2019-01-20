@@ -18,7 +18,7 @@ import tensorboardX
 from WordVector import WordVector
 
 
-margin = 0.9
+margin = None
 log_writer = None
 
 
@@ -32,7 +32,7 @@ class SentenceEncoder(torch.nn.Module):
             tmp.append(torch.nn.Conv1d(dim, 100, feature))
         self.convolution = torch.nn.ModuleList(tmp)
         self.dropout = torch.nn.Dropout(0.5)
-        self.fc1 = torch.nn.Linear(100 * len(kernel), 128)
+        self.fc1 = torch.nn.Linear(100 * len(kernel), 8)
 
     def forward(self, x):
         x = self.embedding(x)
@@ -65,6 +65,8 @@ def parse_cmdline():
     p.add_argument('--w2v', required=True)
     p.add_argument('--dataset', required=True)
     p.add_argument('--model', required=True)
+    p.add_argument('--log', required=False, default='log')
+    p.add_argument('--margin', required=False, default=0.95, type=float)
     return p.parse_args()
 
 
@@ -88,10 +90,10 @@ def eval_output(r0, r1, target):
     correct = 0
     m = margin
     for y_, y in zip(predict.cpu(), target.cpu()):
-        if y_ < m and y < -m:
+        if y_ < m and y < 0:
             correct += 1
             continue
-        if y_ > m and y > m:
+        if y_ > m and y > 0:
             correct += 1
             continue
     return correct, predict.sum()
@@ -144,6 +146,9 @@ def check_dataset(*ds):
 
 def main():
     cmdline = parse_cmdline()
+    global margin
+    margin = cmdline.margin
+
     word2vec = WordVector()
     print("Loading word2vec")
     word2vec.load_bin(cmdline.w2v)
@@ -162,15 +167,15 @@ def main():
     print("Initial dev set evaluation:", r)
 
     global log_writer
-    if os.path.isdir('log'):
-        shutil.rmtree('log')
-    log_writer = tensorboardX.SummaryWriter('log')
+    if os.path.isdir(cmdline.log):
+        shutil.rmtree(cmdline.log)
+    log_writer = tensorboardX.SummaryWriter(cmdline.log)
 
     sparse_optimizer = torch.optim.SparseAdam(model.sparse_parameters())
     dense_optimizer = torch.optim.Adam(model.dense_parameters())
     criterion = torch.nn.CosineEmbeddingLoss(margin=margin)
 
-    epoch = 25
+    epoch = 15
 
     for e in range(epoch):
         print("Epoch %d ===============" % e)
@@ -198,6 +203,7 @@ def main():
         print("Epoch size:", sample, "average loss:", total_loss / sample,
             "time", time.time() - start)
         log_writer.add_scalars('loss', {'train': total_loss / sample}, e + 1)
+        print("Training accuracy", correct / sample)
         log_writer.add_scalars('accuracy', {'train': correct / sample}, e + 1)
         r = evaluate(dev_loader, model, e + 1)
         print("Dev set evaluation", r)
