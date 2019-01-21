@@ -29,10 +29,10 @@ class SentenceEncoder(torch.nn.Module):
 
         tmp = []
         for feature in kernel:
-            tmp.append(torch.nn.Conv1d(dim, 100, feature))
+            tmp.append(torch.nn.Conv1d(dim, 300, feature))
         self.convolution = torch.nn.ModuleList(tmp)
         self.dropout = torch.nn.Dropout(0.5)
-        self.fc1 = torch.nn.Linear(100 * len(kernel), 8)
+        self.fc1 = torch.nn.Linear(300 * len(kernel), 128)
 
     def forward(self, x):
         x = self.embedding(x)
@@ -66,7 +66,7 @@ def parse_cmdline():
     p.add_argument('--dataset', required=True)
     p.add_argument('--model', required=True)
     p.add_argument('--log', required=False, default='log')
-    p.add_argument('--margin', required=False, default=0.95, type=float)
+    p.add_argument('--margin', required=False, default=0.3, type=float)
     return p.parse_args()
 
 
@@ -99,7 +99,7 @@ def eval_output(r0, r1, target):
     return correct, predict.sum()
 
 
-def evaluate(loader, model, step):
+def evaluate(loader, model, step, quiet=False):
     start = time.time()
     with torch.no_grad():
         total = 0
@@ -120,13 +120,14 @@ def evaluate(loader, model, step):
     if step is not None:
         log_writer.add_scalars('loss', {'dev': total_loss / total}, step)
         log_writer.add_scalars('accuracy', {'dev': correct / total}, step)
-    print("Eval() time: ", time.time() - start)
-    print("output mean: ", output_sum / total)
+    if not quiet:
+        print("Eval() time: ", time.time() - start)
+        print("Output mean: ", output_sum / total)
     return total, correct, correct / total
 
 
 def create_encoder(word2vec):
-    model = SentenceEncoder(len(word2vec.weight), word2vec.dim, [3, 4, 5])
+    model = SentenceEncoder(len(word2vec.weight), word2vec.dim, [1, 2, 3, 4, 5])
     model.cuda()
     model.embedding.weight.data = torch.Tensor(word2vec.weight)
     return model
@@ -208,6 +209,20 @@ def main():
         r = evaluate(dev_loader, model, e + 1)
         print("Dev set evaluation", r)
 
+    print("Searching for best margin")
+    end = 0.999
+    best_accuracy = 0
+    best_margin = 0
+    while margin <= end:
+        r = evaluate(dev_loader, model, None, quiet=True)
+        if r[2] > best_accuracy:
+            best_accuracy = r[2]
+            best_margin = margin
+            print("Updating margin to", best_margin, "accuracy", best_accuracy)
+        margin += 0.001
+    print("Best accuracy:", best_accuracy, "corresponding margin", best_margin)
+
+    margin = best_margin
     r = evaluate(test_loader, model, None)
     print("Test set evaluation:", r)
 
