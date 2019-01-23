@@ -66,7 +66,7 @@ def parse_cmdline():
     p.add_argument('--dataset', required=True)
     p.add_argument('--model', required=True)
     p.add_argument('--log', required=False, default='log')
-    p.add_argument('--margin', required=False, default=0.3, type=float)
+    p.add_argument('--margin', required=False, default=0.95, type=float)
     return p.parse_args()
 
 
